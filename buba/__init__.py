@@ -15,13 +15,13 @@ DEFAULT_ENV_PREFIX = 'APP_CONFIG'
 DEFAULT_SPLITTER = '__'
 
 
-class DottyDict(dict):
+class DotDict(dict):
     """ Dict which allow to access to dict values using dot, e.g. my_dict.key.key1 instead my_dict['key']['key1'] """
 
     def __getattr__(self, item):
         val = self[item]
         if isinstance(val, dict):
-            return DottyDict(val)
+            return DotDict(val)
         else:
             return val
 
@@ -35,26 +35,32 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class RubyConfig(metaclass=Singleton):
+class Buba():
     """ Config class (singleton) """
 
+    __metaclass__ = Singleton
+
     def __init__(self, **kwargs):
-        self.__config = DottyDict()
+        self._options = kwargs
+        self.__config = DotDict()
+        self._env_prefix = self._options.get('prefix', DEFAULT_ENV_PREFIX).upper()
+        self._env_splitter = self._options.get('splitter', DEFAULT_SPLITTER)
+        self._raise_error = self._options.get('raise_error', True)
+        self._overwrite_arrays = self._options.get('overwrite_arrays', True)
 
+        self.load()
+
+    def load(self):
+        self.__config = DotDict()
+
+        env_name = self._options.get('env_name', DEFAULT_ENV).upper()
         try:
-            self._env_name = kwargs.get('env_name', DEFAULT_ENV).upper()
-            self._env_value = environ[self._env_name]
+            env_value = environ[env_name]
         except KeyError:
-            self._env_value = 'development'
+            env_value = 'development'
+        logger.info('Config initialized! Environment variable: %s=%s', env_name, env_value)
 
-        logger.info('Config initialized! Environment variable: %s=%s', self._env_name, self._env_value)
-
-        config_location = kwargs.get('configs_path', path.join(getcwd(), 'config'))
-        self._env_prefix = kwargs.get('prefix', DEFAULT_ENV_PREFIX).upper()
-        self._env_splitter = kwargs.get('splitter', DEFAULT_SPLITTER)
-        self._raise_error = kwargs.get('raise_error', True)
-        self._overwrite_arrays = kwargs.get('overwrite_arrays', True)
-
+        config_location = self._options.get('configs_path', path.join(getcwd(), 'config'))
         configs = glob(path.join(config_location, '*.yaml'))
 
         if configs:
@@ -64,15 +70,14 @@ class RubyConfig(metaclass=Singleton):
             logger.error('Cannot find config dir/or config files: %s', path.join(config_location, '*.yaml'))
             exit(1)
 
-        env_configs = glob(path.join(config_location, 'environments', '{}*.yaml'.format(self._env_value)))
-
+        env_configs = glob(path.join(config_location, 'environments', '{}*.yaml'.format(env_value)))
         if env_configs:
             for yaml_file in sorted(env_configs):
                 self._load_config(yaml_file)
         else:
-            logger.info('"{}*.yaml" configs not found!'.format(self._env_value))
+            logger.info('"{}*.yaml" configs not found!'.format(env_value))
 
-        if kwargs.get('use_env', True):
+        if self._options.get('use_env', True):
             self._redefine_variables()
 
     def __repr__(self):
@@ -84,7 +89,7 @@ class RubyConfig(metaclass=Singleton):
         with open(config_file) as fp:
             cfg = load(fp, Loader=FullLoader)
             if cfg:
-                self._deepupdate(self.__config, cfg)
+                self._deep_update(self.__config, cfg)
 
     def _redefine_variables(self):
         """ Search for ENV variables with prefix and add them into config dict """
@@ -106,7 +111,7 @@ class RubyConfig(metaclass=Singleton):
             try:
                 return self.__config.__getattr__(item)
             except KeyError:
-                logger.warning(f'Key "{item}" not found!')
+                logger.warning('Key "{}" not found!' % item)
                 return
 
     def _set_config_value(self, keys, value, cfg=None):
@@ -118,7 +123,7 @@ class RubyConfig(metaclass=Singleton):
         else:
             cfg[key] = value
 
-    def _deepupdate(self, target, src):
+    def _deep_update(self, target, src):
         for k, v in src.items():
             if type(v) == list:
                 if k not in target or self._overwrite_arrays:
@@ -129,7 +134,7 @@ class RubyConfig(metaclass=Singleton):
                 if k not in target:
                     target[k] = copy.deepcopy(v)
                 else:
-                    self._deepupdate(target[k], v)
+                    self._deep_update(target[k], v)
             elif type(v) == set:
                 if k not in target or self._overwrite_arrays:
                     target[k] = v.copy()

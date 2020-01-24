@@ -1,0 +1,5 @@
+db:
+  host: 'localhost_default'
+  user: 'user_default'
+  password: 'password_default'
+

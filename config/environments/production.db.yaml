@@ -1,0 +1,4 @@
+db:
+  user: 'user_production'
+  password: 'password_production'
+

@@ -1,0 +1,4 @@
+db:
+  user: 'user_development'
+  password: 'password_development'
+
